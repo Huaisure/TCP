@@ -5,81 +5,10 @@
 提示：TCP是有状态的协议，因此你大概率，会需要一个什么样的数据结构来记录和维护所有连接的状态
 """
 
-# from api import ConnectionIdentifier
-from api import *
-from enum import Enum
-import random
+from utils import *
 
-############################################################################################################
-# 维护连接状态
-############################################################################################################
-connctions = {}
-
-# 定义连接状态
-class TCPState(Enum):
-    CLOSED = 0
-    LISTEN = 1
-    SYN_SENT = 2
-    SYN_RECEIVED = 3
-    ESTABLISHED = 4
-    FIN_WAIT_1 = 5
-    FIN_WAIT_2 = 6
-    CLOSE_WAIT = 7
-    CLOSING = 8
-    LAST_ACK = 9
-    TIME_WAIT = 10
-
-
-class Connection:
-    """
-    定义一个类，用于记录连接的状态
-    """
-
-    def __init__(
-        self,
-        conn: ConnectionIdentifier,
-        state=TCPState.CLOSED,
-        seq_num=0,
-        ack_num=0,
-        window_size=0,
-        checksum=0,
-        urgent_pointer=0,
-    ):
-        self.conn = conn
-        self.state = state
-        self.seq_num = seq_num
-        self.ack_num = ack_num
-        self.window_size = window_size
-        self.checksum = checksum
-        self.urgent_pointer = urgent_pointer
-
-    def get_state(self):
-        return self.state
-
-    def set_state(self, state: TCPState):
-        self.state = state
-
-
-def create_connection(
-    conn: ConnectionIdentifier,
-    state=TCPState.CLOSED,
-    seq_num=0,
-    ack_num=0,
-    window_size=0,
-    checksum=0,
-    urgent_pointer=0,
-):
-    connctions[conn] = Connection(
-        conn, state, seq_num, ack_num, window_size, checksum, urgent_pointer
-    )
-
-
-def get_connection(conn: ConnectionIdentifier):
-    if conn in connctions:
-        return connctions[conn]
-    else:
-        connctions[conn] = Connection(conn)
-        return connctions[conn]
+# 测试用
+verbose = 1
 
 
 ############################################################################################################
@@ -93,144 +22,16 @@ def app_connect(conn: ConnectionIdentifier):
     :param conn: 连接对象
     :return:
     """
-    # TODO 请实现此函数
-    source_port = conn.src.port
-    destination_port = conn.dst.port
-    # 初始序列号
-    seq_num = random.randiant(0, 2**32 - 1)
-    ack_num = 0
+    # 创建一个Connection，seq_num为最初随机的序列号
+    my_conn = create_connection(conn, seq_num=random.randint(0, 2**32 - 1))
     # 第一次握手
-    syn_flag = 1  # SYN标志位为1
-    tcp_header = create_tcp_header(
-        source_port, destination_port, seq_num, ack_num, syn_flag=syn_flag
-    )
-    tcp_tx(conn, tcp_header)
-
-    # 第二次握手
-
-    # 第三次握手
-
-    app_connected(conn)
-    print("app_connect", conn)
-
-
-def create_tcp_header(
-    source_port,
-    destination_port,
-    seq_num,
-    ack_num,
-    syn_flag=0,
-    ack_flag=0,
-    fin_flag=0,
-    rst_flag=0,
-    psh_flag=0,
-    urg_flag=0,
-    window_size=0,
-    checksum=0,
-    urgent_pointer=0,
-):
-    """
-    创建TCP报文头部，返回TCP报文头部
-    """
-    # 16位源端口号
-    source_port = source_port.to_bytes(2, byteorder="big")
-    # 16位目的端口号
-    destination_port = destination_port.to_bytes(2, byteorder="big")
-    # 32位序列号
-    seq_num = seq_num.to_bytes(4, byteorder="big")
-    # 32位确认号
-    ack_num = ack_num.to_bytes(4, byteorder="big")
-    # 4位首部长度
-    data_offset = 5
-    # 6位保留位
-    reserved = 0
-    # 检查标志位是否都为0或1
-    assert all(
-        flag in (0, 1)
-        for flag in (syn_flag, ack_flag, fin_flag, rst_flag, psh_flag, urg_flag)
-    ), "Invalid flag value!"
-    flags = (
-        urg_flag << 5
-        | ack_flag << 4
-        | psh_flag << 3
-        | rst_flag << 2
-        | syn_flag << 1
-        | fin_flag
-    )
-    data_offset_reserved_flags = data_offset << 12 | reserved << 6 | flags
-    data_offset_reserved_flags = data_offset_reserved_flags.to_bytes(2, byteorder="big")
-    # 16位窗口大小
-    window_size = window_size.to_bytes(2, byteorder="big")
-    # 16位校验和，后面更新
-    checksum = 0
-    # 16位紧急指针
-    urgent_pointer = urgent_pointer.to_bytes(2, byteorder="big")
-
-    # 计算校验和
-    fake_tcp_header = (
-        source_port
-        + destination_port
-        + seq_num
-        + ack_num
-        + data_offset_reserved_flags
-        + window_size
-        + urgent_pointer
-    )
-    checksum = calculate_checksum(fake_tcp_header)
-    # TCP报文头部
-    fake_tcp_header = (
-        source_port
-        + destination_port
-        + seq_num
-        + ack_num
-        + data_offset
-        + reserved
-        + flags
-        + window_size
-        + checksum
-        + urgent_pointer
-    )
-
-    # 更新data_offset
-    length = len(fake_tcp_header)
-    new_data_offset = length // 4
-
-    if data_offset == new_data_offset:
-        tcp_header = fake_tcp_header
-    else:
-        data_offset = new_data_offset
-        data_offset_reserved_flags = data_offset << 12 | reserved << 6 | flags
-        data_offset_reserved_flags = data_offset_reserved_flags.to_bytes(
-            2, byteorder="big"
-        )
-        tcp_header = (
-            source_port
-            + destination_port
-            + seq_num
-            + ack_num
-            + data_offset_reserved_flags
-            + window_size
-            + checksum
-            + urgent_pointer
-        )
-
-    return tcp_header
-
-
-def calculate_checksum(data: bytes) -> bytes:
-    """
-    计算校验和，返回16字节的checksum
-    """
-    checksum = 0
-    for i in range(0, len(data), 2):
-        if i + 1 < len(data):
-            checksum += (data[i] << 8) + data[i + 1]
-        elif i + 1 == len(data):
-            checksum += data[i]
-    while checksum >> 16:
-        checksum = (checksum & 0xFFFF) + (checksum >> 16)
-    checksum = ~checksum & 0xFFFF
-    return checksum.to_bytes(2, byteorder="big")
+    # 发送SYN报文
+    my_conn.send(syn_flag=1)
+    # 更新连接状态
+    my_conn.set_state(TCPState.SYN_SENT)
+    my_conn.seq_num = my_conn.seq_num + 1
+    if verbose:
+        print("app_connect", conn)
 
 
 def app_send(conn: ConnectionIdentifier, data: bytes):
@@ -240,8 +41,12 @@ def app_send(conn: ConnectionIdentifier, data: bytes):
     :param data: 数据内容，是字节数组
     :return:
     """
-    # TODO 请实现此函数
-    print("app_send", conn, data.decode(errors="replace"))
+    my_conn = get_connection(conn)
+    my_conn.send(data=data, ack_flag=1, psh_flag=1)
+    # 更新seq
+    my_conn.seq_num += len(data)
+    if verbose:
+        print("app_send", conn, data.decode(errors="replace"))
 
 
 def app_fin(conn: ConnectionIdentifier):
@@ -250,8 +55,13 @@ def app_fin(conn: ConnectionIdentifier):
     :param conn: 连接对象
     :return:
     """
-    # TODO 请实现此函数
-    print("app_fin", conn)
+    my_conn = get_connection(conn)
+    my_conn.send(fin_flag=1, ack_flag=1)
+    my_conn.seq_num += 1
+    my_conn.set_state(TCPState.FIN_WAIT_1)
+    if verbose:
+        print("app_fin", conn)
+        print("State: FIN_WAIT_1")
 
 
 def app_rst(conn: ConnectionIdentifier):
@@ -260,8 +70,10 @@ def app_rst(conn: ConnectionIdentifier):
     :param conn: 连接对象
     :return:
     """
-    # TODO 请实现此函数
-    print("app_rst", conn)
+    my_conn = get_connection(conn)
+    my_conn.send(rst_flag=1, ack_flag=1)
+    if verbose:
+        print("app_rst", conn)
 
 
 def tcp_rx(conn: ConnectionIdentifier, data: bytes):
@@ -272,48 +84,121 @@ def tcp_rx(conn: ConnectionIdentifier, data: bytes):
     :param data: TCP报文内容，是字节数组。（含TCP报头，不含IP报头）
     :return:
     """
-    # TODO 请实现此函数
     tcp_info = {}
     tcp_info = get_tcp_info(data)
-    print("tcp_rx", conn, data.decode(errors="replace"))
-    return tcp_info
+    my_conn = get_connection(conn)
+    # 几种特殊情况，优先考虑
+    if tcp_info["rst_flag"] == 1:
+        # 对端要求重置连接
+        app_peer_rst(conn)
 
+    elif my_conn is None or my_conn.get_state() == TCPState.CLOSED:
+        app_rst(conn)
 
-def get_tcp_info(data: bytes):
-    tcp_info = {}
-    source_port = int.from_bytes(data[0:2], byteorder="big")
-    destination_port = int.from_bytes(data[2:4], byteorder="big")
-    seq_num = int.from_bytes(data[4:8], byteorder="big")
-    ack_num = int.from_bytes(data[8:12], byteorder="big")
-    data_offset_reserved_flags = int.from_bytes(data[12:14], byteorder="big")
-    data_offset = data_offset_reserved_flags >> 12
-    flags = data_offset_reserved_flags & 0x3F
-    reserved = (data_offset_reserved_flags >> 6) & 0x3F
-    syn_flag = (flags >> 1) & 0x1
-    ack_flag = (flags >> 4) & 0x1
-    fin_flag = flags & 0x1
-    rst_flag = (flags >> 2) & 0x1
-    psh_flag = (flags >> 3) & 0x1
-    urg_flag = (flags >> 5) & 0x1
-    window_size = int.from_bytes(data[14:16], byteorder="big")
-    checksum = int.from_bytes(data[16:18], byteorder="big")
-    urgent_pointer = int.from_bytes(data[18:20], byteorder="big")
-    tcp_info["source_port"] = source_port
-    tcp_info["destination_port"] = destination_port
-    tcp_info["seq_num"] = seq_num
-    tcp_info["ack_num"] = ack_num
-    tcp_info["data_offset"] = data_offset
-    tcp_info["reserved"] = reserved
-    tcp_info["syn_flag"] = syn_flag
-    tcp_info["ack_flag"] = ack_flag
-    tcp_info["fin_flag"] = fin_flag
-    tcp_info["rst_flag"] = rst_flag
-    tcp_info["psh_flag"] = psh_flag
-    tcp_info["urg_flag"] = urg_flag
-    tcp_info["window_size"] = window_size
-    tcp_info["checksum"] = checksum
-    tcp_info["urgent_pointer"] = urgent_pointer
-    return tcp_info
+    # 如果此时连接状态为ESTABLISHED，说明可能收到数据
+    elif my_conn.get_state() == TCPState.ESTABLISHED:
+        if tcp_info["fin_flag"]:
+            # 对端要求半关闭连接
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            my_conn.ack_num = tcp_info["seq_num"] + 1
+            my_conn.set_state(TCPState.CLOSE_WAIT)
+            my_conn.send(ack_flag=1)
+            # 发送ACK后，通知应用层进行半关闭
+            app_peer_fin(conn)
+            # 进行第三次挥手，发送FIN
+            my_conn.set_state(TCPState.LAST_ACK)
+            my_conn.send(fin_flag=1, ack_flag=1)
+            my_conn.seq_num += 1
+
+        else:
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            if len(tcp_info["data"]) > 0:
+                # 判断是否当前的收到报文的seq是否为当前记录的ack
+                if my_conn.ack_num == tcp_info["seq_num"]:
+                    my_conn.ack_num = tcp_info["seq_num"] + len(tcp_info["data"])
+                # 回复收到数据的报文
+                my_conn.send(ack_flag=1)
+                app_recv(conn, tcp_info["data"])
+
+    # 如果此时连接状态为SYN_SENT，即处于第二次握手状态
+    elif my_conn.get_state() == TCPState.SYN_SENT:
+        if tcp_info["syn_flag"] and tcp_info["ack_flag"]:
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            my_conn.ack_num = tcp_info["seq_num"] + 1
+            my_conn.set_state(TCPState.ESTABLISHED)
+            my_conn.send(ack_flag=1)
+            app_connected(conn)
+            if verbose:
+                print("第三次握手成功连接")
+        else:
+            if verbose:
+                print("第二次握手失败")
+
+    elif my_conn.get_state() == TCPState.FIN_WAIT_2:
+        # 接受server端未发送完的数据
+        # app_recv(conn,tcp_info["data"])
+        if tcp_info["fin_flag"]:
+            # 半关闭请求
+            my_conn.set_state(TCPState.TIME_WAIT)
+            my_conn.wait_time = time.time()
+            app_peer_fin(conn)
+            my_conn.update(seq_num=tcp_info["ack_num"], ack_num=tcp_info["seq_num"] + 1)
+            my_conn.send(ack_flag=1)
+            print("State: TIME_WAIT_1")
+
+    elif my_conn.get_state() == TCPState.FIN_WAIT_1:
+        if tcp_info["ack_flag"] and not tcp_info["fin_flag"]:
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            my_conn.set_state(TCPState.FIN_WAIT_2)
+            my_conn.ack_num = tcp_info["seq_num"]
+            if verbose:
+                print("State: FIN_WAIT_2")
+
+        elif tcp_info["fin_flag"] and tcp_info["ack_flag"]:
+            # 直接进入TIME_WAIT阶段
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            my_conn.wait_time = time.time()
+            my_conn.send(ack_flag=1)
+            my_conn.set_state(TCPState.TIME_WAIT)
+            if verbose:
+                print("State:TIME_WAIT_2")
+
+        elif tcp_info["fin_flag"] and not tcp_info["ack_flag"]:
+            # 进入CLOSING状态
+            if my_conn.lastack > tcp_info["ack_num"]:
+                # 如果上次的确认号比当前收到的确认号大，说明已经超过2**32进入下一次循环
+                my_conn.cycle += 1
+            my_conn.lastack = tcp_info["ack_num"]
+            # 通知应用层半关闭
+            app_peer_fin(conn)
+            my_conn.ack_num = tcp_info["seq_num"] + 1
+            my_conn.send(ack_flag=1)
+
+    elif my_conn.get_state() == TCPState.CLOSING:
+        # 如果收到ACK
+        if tcp_info["ack_flag"]:
+            my_conn.set_state(TCPState.TIME_WAIT)
+            my_conn.wait_time = time.time()
+            if verbose:
+                print("State: TIME_WAIT_3")
+
+    # print("tcp_rx", conn, data.decode(errors="replace"))
+    # return tcp_info
 
 
 def tick():
@@ -321,5 +206,41 @@ def tick():
     这个函数会每至少100ms调用一次，以保证控制权可以定期的回到你实现的函数中，而不是一直阻塞在main文件里面。
     它可以被用来在不开启多线程的情况下实现超时重传等功能，详见主仓库的README.md
     """
-    # TODO 可实现此函数，也可不实现
-    pass
+    topop = []
+    for conn_name, my_conn in connctions.items():
+        if my_conn.state == TCPState.CLOSED:
+            # 如果当前连接的状态已关闭，则不需要重传
+            continue
+        for r in my_conn.record:
+            if time.time() - r["time"] > TIMEOUT / 1000 * 2 ** (r["retry_num"] - 1):
+                if verbose:
+                    print(time.time())
+                    print(r)
+                # 如果当前时间比记录时间超出，timeout的2的重传次数-1次幂，则说明已超时
+                if my_conn.lastack + my_conn.cycle * (1 << 32) <= r["seq_num"]:
+
+                    # 如果最后一次确认的ack比seq更大，说明已经成功发送；反之，需要重传
+                    if r["retry_num"] > MAX_RETRANSMISSION:
+                        # 如果当前重传次数已超过最大重传次数，说明连接存在问题，请求rst
+                        my_conn.set_state(TCPState.CLOSED)
+                        app_rst(conn=my_conn.conn)
+                        app_peer_rst(my_conn.conn)
+                    else:
+                        # 继续重传，更新record中的内容，更新时间和重传次数
+                        r["time"] = time.time()
+                        r["retry_num"] += 1
+                        tcp_tx(my_conn.conn, r["packet"])
+                else:
+                    # 说明重传已成功
+                    pass
+        if my_conn.get_state() == TCPState.TIME_WAIT:
+            # 如果当前状态为TIME_WAIT，则需要等待WAIT_TIME时间，然后释放连接
+            if time.time() - my_conn.wait_time > WAIT_TIME:
+                # 达到等待的时间
+                topop.append(conn_name)
+                # print(topop)
+                release_connection(my_conn.conn)
+    for name in topop:
+        connctions.pop(name)
+        if verbose:
+            print("Connection Pop")
